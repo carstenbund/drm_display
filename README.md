@@ -1,4 +1,4 @@
-## drm_player
+## drm_display
 
 
 frambuffer setup in C in drm_display.c

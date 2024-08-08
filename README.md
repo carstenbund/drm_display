@@ -6,6 +6,9 @@ compile with:
 ```
 gcc -shared -o libdrm_display.so -I/usr/include/libdrm -fPIC drm_display.c -ldrm
 ```
+some systems use /usr/include/libdrm 
+others /usr/include/drm
+
 
 python bindings in drm_display.py
 

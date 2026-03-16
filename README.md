@@ -3,7 +3,7 @@
 Python display library for Linux — write NumPy image arrays directly to a
 screen without a compositor, X server, or Wayland session.
 
-Initislly designed for Raspberry PI as DRM setup for kiosk mode.
+Initially designed for Raspberry PI as DRM setup for kiosk mode.
 
 Designed for **embedded systems, CVM/KVM virtual machines, single-board
 computers, and headless servers with an attached display** where the traditional

@@ -289,6 +289,9 @@ class DRMDisplay:
         if hasattr(self, 'res') and self.res:
             self.lib.free_resources(self.res)
 
+    def close(self):
+        self.cleanup()
+
     def __del__(self):
         self.cleanup()
 

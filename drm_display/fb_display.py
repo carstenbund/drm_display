@@ -43,7 +43,6 @@ class FBDisplay(object):
         self.fb[:canvas.shape[0], :canvas.shape[1], :4] = canvas
     
     def close(self):
-        return
         self.clear()
         self.fb = None
 

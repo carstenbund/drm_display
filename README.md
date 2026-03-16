@@ -405,14 +405,11 @@ drm-list-modes    # shows which process holds master
 
 ---
 
-## Build from source — publishing
+Changes:
 
-```bash
-pip install build twine
-python -m build
-twine upload --repository testpypi dist/*   # smoke-test on TestPyPI first
-twine upload dist/*                          # publish to PyPI
-```
+0.1.3   Cleanup README.md
+0.1.2   added Screen handler class, removed CV2 and Pillow dependencies. 
+0.1.0   initial
 
 ---
 

@@ -26,18 +26,18 @@ class drmModeModeInfo(ctypes.Structure):
 
 class drmModeRes(ctypes.Structure):
     _fields_ = [
-        ("fb_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
-        ("crtc_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
+        ("count_fbs",        ctypes.c_int),
+        ("fb_id_ptr",        ctypes.POINTER(ctypes.c_uint32)),
+        ("count_crtcs",      ctypes.c_int),
+        ("crtc_id_ptr",      ctypes.POINTER(ctypes.c_uint32)),
+        ("count_connectors", ctypes.c_int),
         ("connector_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
-        ("encoder_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
-        ("count_fbs", ctypes.c_uint32),
-        ("count_crtcs", ctypes.c_uint32),
-        ("count_connectors", ctypes.c_uint32),
-        ("count_encoders", ctypes.c_uint32),
-        ("min_width", ctypes.c_uint32),
-        ("max_width", ctypes.c_uint32),
-        ("min_height", ctypes.c_uint32),
-        ("max_height", ctypes.c_uint32),
+        ("count_encoders",   ctypes.c_int),
+        ("encoder_id_ptr",   ctypes.POINTER(ctypes.c_uint32)),
+        ("min_width",        ctypes.c_uint32),
+        ("max_width",        ctypes.c_uint32),
+        ("min_height",       ctypes.c_uint32),
+        ("max_height",       ctypes.c_uint32),
     ]
 
 class drmModeConnector(ctypes.Structure):

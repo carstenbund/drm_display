@@ -1,14 +1,15 @@
 # drm-display
 
-Python bindings for Linux **DRM/KMS** display output — send NumPy image arrays
-directly to `/dev/dri/cardN` without a compositor or X server.
+Python display library for Linux — sends NumPy image arrays to a screen
+without a compositor or X server.
 
-## System requirements
+Three backends are included; `Screen` picks the best one automatically:
 
-- Linux with a KMS-capable GPU (most modern hardware)
-- `libdrm` development headers: `apt install libdrm-dev` / `dnf install libdrm-devel`
-- `gcc`
-- Access to `/dev/dri/cardN` (add your user to the `video` group or run as root)
+| Backend | Device | Notes |
+|---|---|---|
+| `DRMDisplay` | `/dev/dri/cardN` | DRM/KMS via `libdrm` — preferred, works with modern CVM/KVM drivers |
+| `FBDisplay` | `/dev/fb0` | Legacy framebuffer via `numpy.memmap` — no C build required |
+| `DBDisplay` | *(in-memory)* | Headless numpy buffer — always works, good for testing |
 
 ## Install
 
@@ -16,32 +17,55 @@ directly to `/dev/dri/cardN` without a compositor or X server.
 pip install drm-display
 ```
 
-`pip install` compiles the small C helper (`drm_display.c`) against your
-system's `libdrm` automatically.  `pkg-config libdrm` is used when available;
-otherwise `/usr/include/libdrm` and `-ldrm` are assumed.
+`pip install` compiles the small C helper for the DRM backend automatically.
+Requirements: `gcc`, `libdrm-dev` (Debian/Ubuntu) or `libdrm-devel` (Fedora/RHEL).
 
-## Usage
+If `libdrm` is unavailable the package still installs and `FBDisplay` /
+`DBDisplay` work without it.
+
+## Quick start — `Screen` (recommended)
 
 ```python
+from drm_display import Screen
 import numpy as np
-from drm_display import DRMDisplay
 
-display = DRMDisplay(device="/dev/dri/card0", width=1920, height=1080)
+screen = Screen()                         # auto-detects best backend
+screen = Screen(device="/dev/dri/card0") # force a specific backend
 
-# BGRA uint8 NumPy array, shape (height, width, 4)
-frame = np.zeros((1080, 1920, 4), dtype=np.uint8)
-frame[:, :, 2] = 255   # red screen (B=0, G=0, R=255, A=0)
+w, h = screen.get_screen_size()
 
-display.send_full_image(frame)
+# BGRA uint8 array
+canvas = np.zeros((h, w, 4), dtype=np.uint8)
+canvas[:, :, 2] = 255                    # red fill
+screen.show(canvas)
 
-# Partial update (blit a region at pixel offset x, y)
-patch = np.zeros((100, 200, 4), dtype=np.uint8)
-patch[:, :, 1] = 255   # green patch
-display.send_partial_image(patch, x=50, y=50)
+# Display a scaled & centred OpenCV image (requires opencv-python)
+import cv2
+img = cv2.imread("photo.jpg")
+screen.show_image(img)
+
+screen.close()
 ```
 
-`DRMDisplay.__del__` frees DRM resources automatically; call `display.cleanup()`
-explicitly if you need deterministic teardown.
+## Low-level backends
+
+```python
+from drm_display import DRMDisplay, FBDisplay, DBDisplay
+
+# DRM/KMS
+drm = DRMDisplay(device="/dev/dri/card0", width=1920, height=1080)
+drm.send_full_image(canvas)          # full-screen blit
+drm.send_partial_image(patch, x, y) # blit a region
+
+# Framebuffer
+fb = FBDisplay("/dev/fb0")           # size auto-detected from sysfs
+fb.send_full_image(canvas)
+
+# Headless
+db = DBDisplay(width=1280, height=720)
+db.send_full_image(canvas)
+last_frame = db.fb.copy()
+```
 
 ## Build from source / editable install
 
@@ -54,15 +78,15 @@ pip install -e .        # compiles libdrm_display.so in-place
 Or compile the shared library manually:
 
 ```bash
-gcc -shared -fPIC -o drm_display/libdrm_display.so \
-    $(pkg-config --cflags libdrm) \
-    drm_display/drm_display.c \
-    $(pkg-config --libs libdrm)
+make                    # uses pkg-config
+make CFLAGS_EXTRA="-I/opt/custom/include"   # override include path
+make info               # show resolved flags
 ```
 
 ## Publishing (maintainer notes)
 
 ```bash
+pip install build twine
 python -m build
 twine upload --repository testpypi dist/*   # test first
 twine upload dist/*                          # publish to PyPI

@@ -227,6 +227,8 @@ class DRMDisplay:
         #print("Framebuffer handle:", self.fb_info.handle)
         #print("Framebuffer pitch:", self.fb_info.pitch)
         #print("Framebuffer size:", self.fb_info.size)
+        self.screen_width = self.fb_info.width
+        self.screen_height = self.fb_info.height
         print("Framebuffer width:", self.fb_info.width)
         print("Framebuffer height:", self.fb_info.height)
 

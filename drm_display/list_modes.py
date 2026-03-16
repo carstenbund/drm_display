@@ -329,7 +329,7 @@ def report_drm_device(lib, device):
                 res = res_ptr.contents
                 n   = res.count_connectors
                 for i in range(n):
-                    conn_ptr = lib.drmModeGetConnector(fd, res.connectors[i])
+                    conn_ptr = lib.drmModeGetConnector(fd, res.connector_id_ptr[i])
                     if not conn_ptr:
                         continue
                     c         = conn_ptr.contents

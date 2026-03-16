@@ -114,6 +114,9 @@ class DRMDisplay:
         ]
         self.lib.send_to_fb.restype = None
 
+        self.lib.dirty_fb.argtypes = [ctypes.c_int, ctypes.c_uint32]
+        self.lib.dirty_fb.restype  = None
+
         self.lib.set_crtc_with_mode.argtypes = [
             ctypes.c_int,
             ctypes.c_uint32,
@@ -277,11 +280,13 @@ class DRMDisplay:
     def send_full_image(self, data):
         data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.lib.send_to_fb(self.fd, self.fb_info.handle, self.fb_info.size, data_ptr, self.fb_info.width, self.fb_info.height, 0, 0, self.fb_info.pitch)
+        self.lib.dirty_fb(self.fd, self.fb_info.fb_id)
 
     def send_partial_image(self, data, x, y):
         height, width, _ = data.shape
         data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.lib.send_to_fb(self.fd, self.fb_info.handle, self.fb_info.size, data_ptr, width, height, x, y, self.fb_info.pitch)
+        self.lib.dirty_fb(self.fd, self.fb_info.fb_id)
 
     def cleanup(self):
         if hasattr(self, 'crtc') and self.crtc:

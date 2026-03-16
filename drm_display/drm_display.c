@@ -63,6 +63,7 @@ EXPORT struct framebuffer_info create_framebuffer(int fd, uint32_t width, uint32
     }
 
     memset(fb_ptr, 0x00, create.size);  // Clear framebuffer to black initially
+    munmap(fb_ptr, create.size);
 
     struct drm_mode_fb_cmd cmd = {};
     cmd.width = create.width;
@@ -101,6 +102,10 @@ EXPORT void send_to_fb(int fd, uint32_t handle, uint32_t size, uint8_t *data, ui
     }
 
     munmap(fb_ptr, size);
+}
+
+EXPORT void dirty_fb(int fd, uint32_t fb_id) {
+    drmModeDirtyFB(fd, fb_id, NULL, 0);
 }
 
 EXPORT int set_crtc(int fd, drmModeCrtc *crtc, uint32_t fb_id, drmModeConnector *conn) {

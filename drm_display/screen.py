@@ -101,6 +101,7 @@ class Screen:
 
     def close(self):
         self.display.close()
+        self._last_image = None
 
     def show_image(self, img, img2=None):
         """Scale and centre a (H, W, 3|4) uint8 NumPy image on the screen.

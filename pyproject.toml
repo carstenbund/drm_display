@@ -8,13 +8,12 @@ version = "0.1.0"
 description = "Python bindings for Linux DRM/KMS display output via /dev/dri/cardN"
 readme = "README.md"
 requires-python = ">=3.8"
-license = {text = "MIT"}
+license = "MIT"
 dependencies = ["numpy"]
 keywords = ["drm", "kms", "display", "linux", "framebuffer", "embedded"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: C",

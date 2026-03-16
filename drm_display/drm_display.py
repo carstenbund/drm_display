@@ -291,12 +291,16 @@ class DRMDisplay:
     def cleanup(self):
         if hasattr(self, 'crtc') and self.crtc:
             self.lib.free_crtc(self.crtc)
+            self.crtc = None
         if hasattr(self, 'enc') and self.enc:
             self.lib.free_encoder(self.enc)
+            self.enc = None
         if hasattr(self, 'conn') and self.conn:
             self.lib.free_connector(self.conn)
+            self.conn = None
         if hasattr(self, 'res') and self.res:
             self.lib.free_resources(self.res)
+            self.res = None
 
     def close(self):
         self.cleanup()

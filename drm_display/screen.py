@@ -17,7 +17,7 @@ Usage::
 
     canvas = np.zeros((screen.screen_height, screen.screen_width, 4), dtype=np.uint8)
     screen.show(canvas)
-    screen.show_image(bgr_img)               # scales + centres an OpenCV image
+    screen.show_image(img_array)             # scales + centres any (h,w,3/4) array
 """
 
 import numpy as np
@@ -26,11 +26,27 @@ from .drm_display import DRMDisplay
 from .fb_display import FBDisplay
 from .db_display import DBDisplay
 
-try:
-    import cv2
-    _CV2_AVAILABLE = True
-except ImportError:
-    _CV2_AVAILABLE = False
+
+
+def _numpy_resize(img, new_h, new_w):
+    """Area-average downscale — pure numpy, no extra dependencies.
+
+    Uses np.add.reduceat for vectorised block averaging: one pass over rows,
+    one pass over columns.  Fast enough for display-rate use on small systems.
+    """
+    src_h, src_w = img.shape[:2]
+    row_cuts = np.round(np.linspace(0, src_h, new_h + 1)).astype(int)
+    col_cuts = np.round(np.linspace(0, src_w, new_w + 1)).astype(int)
+
+    # Average rows into new_h bands
+    tmp = np.add.reduceat(img.astype(np.float32), row_cuts[:-1], axis=0)
+    tmp /= np.diff(row_cuts)[:, None, None]
+
+    # Average columns into new_w bands
+    tmp = np.add.reduceat(tmp, col_cuts[:-1], axis=1)
+    tmp /= np.diff(col_cuts)[None, :, None]
+
+    return np.clip(tmp, 0, 255).astype(np.uint8)
 
 
 class Screen:
@@ -87,14 +103,14 @@ class Screen:
         self.display.close()
 
     def show_image(self, img, img2=None):
-        """Scale and centre an OpenCV BGR/BGRA image on the screen.
+        """Scale and centre a (H, W, 3|4) uint8 NumPy image on the screen.
 
-        Requires opencv-python (``pip install opencv-python``).
-        If *img2* is supplied, both images are placed side-by-side first.
+        Channel order (BGR, RGB, BGRA, RGBA) is preserved as-is.
+        Downscaling uses a vectorised numpy area-average — no extra
+        dependencies beyond numpy.
+
+        If *img2* is supplied both images are placed side-by-side first.
         """
-        if not _CV2_AVAILABLE:
-            raise RuntimeError("show_image() requires opencv-python: pip install opencv-python")
-
         if img2 is not None:
             img = self._side_by_side(img, img2)
 
@@ -106,19 +122,19 @@ class Screen:
             scale = min(self.screen_width / img_w, self.screen_height / img_h)
 
         if scale < 1:
-            img = cv2.resize(
-                img,
-                (int(img_w * scale), int(img_h * scale)),
-                interpolation=cv2.INTER_LANCZOS4,
-            )
+            img = _numpy_resize(img, max(1, int(img_h * scale)),
+                                     max(1, int(img_w * scale)))
 
         img_h, img_w = img.shape[:2]
         pad_x = max(0, (self.screen_width  - img_w) // 2)
         pad_y = max(0, (self.screen_height - img_h) // 2)
 
-        canvas = np.zeros((self.screen_height, self.screen_width, 4), dtype=np.uint8)
+        # Ensure 4 channels — just append a fully-opaque alpha plane
         if img.shape[2] == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
+            alpha = np.full((*img.shape[:2], 1), 255, dtype=np.uint8)
+            img = np.concatenate([img, alpha], axis=2)
+
+        canvas = np.zeros((self.screen_height, self.screen_width, 4), dtype=np.uint8)
         canvas[pad_y:pad_y + img_h, pad_x:pad_x + img_w] = img
         self.show(canvas)
 

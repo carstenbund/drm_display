@@ -148,26 +148,26 @@ screen.clear()
 screen.close()
 ```
 
-### OpenCV image display
+### Displaying an image array
+
+`show_image()` accepts any `(H, W, 3|4)` uint8 NumPy array — BGR, RGB,
+BGRA, or RGBA.  Downscaling is done with a vectorised numpy area-average;
+no OpenCV or Pillow needed.
 
 ```python
-import cv2
+import numpy as np
 from drm_display import Screen
 
 screen = Screen()
-img = cv2.imread("photo.jpg")       # BGR, any size
+
+# Any uint8 array works — from OpenCV, Pillow, imageio, …
+img = np.zeros((480, 640, 3), dtype=np.uint8)   # plain numpy
+img[:, :, 0] = 200                               # blue-ish
 
 screen.show_image(img)              # scales + centres automatically
 
 # Side-by-side comparison
-img2 = cv2.imread("photo2.jpg")
 screen.show_image(img, img2)
-```
-
-`show_image()` requires `opencv-python`.  Install it with:
-
-```bash
-pip install opencv-python
 ```
 
 ---
@@ -367,7 +367,6 @@ Python C extension build system required, no ABI compatibility issues.
 - **numpy** (installed automatically)
 - **gcc** + **libdrm-dev** — required only for `DRMDisplay`; the package
   installs and `FBDisplay`/`DBDisplay` work without it
-- **opencv-python** — optional, required only for `Screen.show_image()`
 - Linux with a KMS-capable GPU for `DRMDisplay`
 - User must be in the `video` group (or run as root) to open `/dev/dri/cardN`
 

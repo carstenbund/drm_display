@@ -270,6 +270,10 @@ class DRMDisplay:
             self.lib.free_resources(self.res)
             raise RuntimeError("Failed to set CRTC")
 
+    def clear(self):
+        blank = np.zeros((self.screen_height, self.screen_width, 4), dtype=np.uint8)
+        self.send_full_image(blank)
+
     def send_full_image(self, data):
         data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.lib.send_to_fb(self.fd, self.fb_info.handle, self.fb_info.size, data_ptr, self.fb_info.width, self.fb_info.height, 0, 0, self.fb_info.pitch)

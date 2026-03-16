@@ -22,6 +22,9 @@ classifiers = [
     "Topic :: System :: Hardware",
 ]
 
+[project.scripts]
+drm-list-modes = "drm_display.list_modes:main"
+
 [project.urls]
 Homepage = "https://github.com/carstenbund/drm_display"
 Repository = "https://github.com/carstenbund/drm_display"

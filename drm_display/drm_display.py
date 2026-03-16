@@ -90,10 +90,8 @@ class FramebufferInfo(ctypes.Structure):
                 ("height", ctypes.c_uint32)]
 
 class DRMDisplay:
-    def __init__(self, device="/dev/dri/card0", width=1024, height=600):
-        #self.lib = ctypes.CDLL(os.path.abspath("libdrm_display.so"))
+    def __init__(self, device="/dev/dri/card0", width=None, height=None):
         base_path = os.path.dirname(__file__)
-        # Construct the absolute path to the shared library
         lib_path = os.path.join(base_path, "libdrm_display.so")
         self.lib = ctypes.CDLL(lib_path)
 
@@ -104,25 +102,26 @@ class DRMDisplay:
         self.lib.create_framebuffer.restype = FramebufferInfo
 
         self.lib.send_to_fb.argtypes = [
-            ctypes.c_int, 
-            ctypes.c_uint32, 
-            ctypes.c_uint32, 
-            ctypes.POINTER(ctypes.c_uint8), 
-            ctypes.c_uint32, 
-            ctypes.c_uint32, 
-            ctypes.c_uint32, 
+            ctypes.c_int,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_uint8),
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
             ctypes.c_uint32,
             ctypes.c_uint32
         ]
         self.lib.send_to_fb.restype = None
 
-        self.lib.set_crtc.argtypes = [
-            ctypes.c_int, 
-            ctypes.POINTER(drmModeCrtc), 
-            ctypes.c_uint32, 
-            ctypes.POINTER(drmModeConnector)
+        self.lib.set_crtc_with_mode.argtypes = [
+            ctypes.c_int,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.POINTER(drmModeModeInfo),
         ]
-        self.lib.set_crtc.restype = ctypes.c_int
+        self.lib.set_crtc_with_mode.restype = ctypes.c_int
 
         self.lib.get_connector.argtypes = [ctypes.c_int, ctypes.POINTER(drmModeRes)]
         self.lib.get_connector.restype = ctypes.POINTER(drmModeConnector)
@@ -153,48 +152,20 @@ class DRMDisplay:
             raise RuntimeError("Failed to open device")
         print("Opened DRM device:", device)
 
-        #time.sleep(5)  # Add a delay to ensure device initialization
-
-        #print("Calling get_resources...")
         self.res = self.lib.get_resources(self.fd)
         if not self.res:
-            print("get_resources returned None")
-            print("Device file descriptor:", self.fd)
             raise RuntimeError("Failed to get DRM resources")
-        #print("Successfully obtained DRM resources")
-        #print("Resources count_fbs:", self.res.contents.count_fbs)
-        #print("Resources count_crtcs:", self.res.contents.count_crtcs)
-        #print("Resources count_connectors:", self.res.contents.count_connectors)
-        #print("Resources count_encoders:", self.res.contents.count_encoders)
 
         self.conn = self.lib.get_connector(self.fd, self.res)
         if not self.conn:
             self.lib.free_resources(self.res)
             raise RuntimeError("No connected connector found")
-        #print("Successfully obtained DRM connector")
-        #print("Connector ID:", self.conn.contents.connector_id)
-        #print("Connector encoder ID:", self.conn.contents.encoder_id)
-        #print("Connector type:", self.conn.contents.connector_type)
-        #print("Connector type ID:", self.conn.contents.connector_type_id)
-        #print("Connector connection:", self.conn.contents.connection)
-        #print("Connector mmWidth:", self.conn.contents.mmWidth)
-        #print("Connector mmHeight:", self.conn.contents.mmHeight)
-        #print("Connector subpixel:", self.conn.contents.subpixel)
-        #print("Connector count_modes:", self.conn.contents.count_modes)
-        #print("Connector count_props:", self.conn.contents.count_props)
-        #print("Connector count_encoders:", self.conn.contents.count_encoders)
 
         self.enc = self.lib.get_encoder(self.fd, self.conn)
         if not self.enc:
             self.lib.free_connector(self.conn)
             self.lib.free_resources(self.res)
             raise RuntimeError("Failed to get encoder")
-        #print("Successfully obtained DRM encoder")
-        #print("Encoder ID:", self.enc.contents.encoder_id)
-        #print("Encoder type:", self.enc.contents.encoder_type)
-        #print("Encoder CRTC ID:", self.enc.contents.crtc_id)
-        #print("Encoder possible CRTCs:", self.enc.contents.possible_crtcs)
-        #print("Encoder possible clones:", self.enc.contents.possible_clones)
 
         self.crtc = self.lib.get_crtc(self.fd, self.enc)
         if not self.crtc:
@@ -202,19 +173,77 @@ class DRMDisplay:
             self.lib.free_connector(self.conn)
             self.lib.free_resources(self.res)
             raise RuntimeError("Failed to get CRTC")
-        #print("Successfully obtained DRM CRTC")
-        #print("CRTC ID:", self.crtc.contents.crtc_id)
-        #print("CRTC buffer ID:", self.crtc.contents.buffer_id)
-        #print("CRTC x:", self.crtc.contents.x)
-        #print("CRTC y:", self.crtc.contents.y)
-        #print("CRTC width:", self.crtc.contents.width)
-        #print("CRTC height:", self.crtc.contents.height)
-        #print("CRTC mode valid:", self.crtc.contents.mode_valid)
-        #print("CRTC mode clock:", self.crtc.contents.mode.clock)
-        #print("CRTC mode hdisplay:", self.crtc.contents.mode.hdisplay)
-        #print("CRTC mode vdisplay:", self.crtc.contents.mode.vdisplay)
-        #print("CRTC mode vrefresh:", self.crtc.contents.mode.vrefresh)
 
+        # -- mode selection ---------------------------------------------------
+        # Read all modes the connector advertises and pick the best one.
+        #
+        # Priority when width/height are given (custom LCD override):
+        #   1. Exact match in connector mode list
+        #   2. Fall back to preferred/first connector mode and warn
+        #
+        # Priority when width/height are None (auto from driver):
+        #   1. Mode flagged DRM_MODE_TYPE_PREFERRED
+        #   2. First mode in the list (drivers usually sort by preference)
+        #   3. If no modes at all: raise a clear error
+        DRM_MODE_TYPE_PREFERRED = 1 << 3
+
+        conn = self.conn.contents
+        n_modes = conn.count_modes
+        modes = [conn.modes[i] for i in range(n_modes)]
+
+        print(f"Connector reports {n_modes} mode(s):")
+        for m in modes:
+            flag = " [preferred]" if m.type & DRM_MODE_TYPE_PREFERRED else ""
+            print(f"  {m.hdisplay}x{m.vdisplay}@{m.vrefresh}{flag} ({m.name.decode()})")
+
+        selected_mode = None
+
+        if width is not None and height is not None:
+            # User explicitly requested a size — try to find an exact match.
+            for m in modes:
+                if m.hdisplay == width and m.vdisplay == height:
+                    selected_mode = m
+                    print(f"Mode matched requested size {width}x{height}")
+                    break
+            if selected_mode is None and modes:
+                # No exact match — use the connector's preferred/first mode.
+                # The framebuffer will still be created at the requested size;
+                # some panels (DSI/LVDS) accept this and do internal scaling.
+                for m in modes:
+                    if m.type & DRM_MODE_TYPE_PREFERRED:
+                        selected_mode = m
+                        break
+                if selected_mode is None:
+                    selected_mode = modes[0]
+                print(
+                    f"Warning: no connector mode for {width}x{height}. "
+                    f"Using connector mode {selected_mode.hdisplay}x{selected_mode.vdisplay} "
+                    f"with framebuffer {width}x{height} — panel may do internal scaling."
+                )
+        else:
+            # Auto: use preferred mode or first available.
+            for m in modes:
+                if m.type & DRM_MODE_TYPE_PREFERRED:
+                    selected_mode = m
+                    break
+            if selected_mode is None and modes:
+                selected_mode = modes[0]
+            if selected_mode is None:
+                self.lib.free_crtc(self.crtc)
+                self.lib.free_encoder(self.enc)
+                self.lib.free_connector(self.conn)
+                self.lib.free_resources(self.res)
+                raise RuntimeError(
+                    "Connector reports no modes. "
+                    "Pass width= and height= explicitly for custom LCD panels."
+                )
+            width  = selected_mode.hdisplay
+            height = selected_mode.vdisplay
+            print(f"Auto-selected mode {width}x{height}@{selected_mode.vrefresh}")
+
+        self._mode = selected_mode  # keep alive for ctypes pointer
+
+        # -- framebuffer + CRTC -----------------------------------------------
         self.fb_info = self.lib.create_framebuffer(self.fd, width, height)
         if not self.fb_info.fb_id:
             self.lib.free_crtc(self.crtc)
@@ -222,26 +251,24 @@ class DRMDisplay:
             self.lib.free_connector(self.conn)
             self.lib.free_resources(self.res)
             raise RuntimeError("Failed to create framebuffer")
-        print("Successfully created framebuffer")
-        #print("Framebuffer ID:", self.fb_info.fb_id)
-        #print("Framebuffer handle:", self.fb_info.handle)
-        #print("Framebuffer pitch:", self.fb_info.pitch)
-        #print("Framebuffer size:", self.fb_info.size)
-        print("Framebuffer width:", self.fb_info.width)
-        print("Framebuffer height:", self.fb_info.height)
 
-        if self.lib.set_crtc(
-            self.fd, 
-            self.crtc, 
-            self.fb_info.fb_id, 
-            self.conn
+        self.screen_width  = self.fb_info.width
+        self.screen_height = self.fb_info.height
+        print(f"Framebuffer: {self.screen_width}x{self.screen_height}")
+
+        mode_ptr = ctypes.pointer(self._mode)
+        if self.lib.set_crtc_with_mode(
+            self.fd,
+            self.crtc.contents.crtc_id,
+            self.fb_info.fb_id,
+            conn.connector_id,
+            mode_ptr,
         ) != 0:
             self.lib.free_crtc(self.crtc)
             self.lib.free_encoder(self.enc)
             self.lib.free_connector(self.conn)
             self.lib.free_resources(self.res)
             raise RuntimeError("Failed to set CRTC")
-        #print("Successfully set CRTC")
 
     def send_full_image(self, data):
         data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))

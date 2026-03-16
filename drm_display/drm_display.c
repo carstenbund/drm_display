@@ -111,6 +111,18 @@ EXPORT int set_crtc(int fd, drmModeCrtc *crtc, uint32_t fb_id, drmModeConnector 
     return 0;
 }
 
+/* set_crtc_with_mode: like set_crtc but uses an explicitly chosen mode.
+ * Use this when the CRTC's current mode (crtc->mode) does not match the
+ * connector's actual panel mode — common with custom LCD screens. */
+EXPORT int set_crtc_with_mode(int fd, uint32_t crtc_id, uint32_t fb_id,
+                               uint32_t connector_id, drmModeModeInfo *mode) {
+    if (drmModeSetCrtc(fd, crtc_id, fb_id, 0, 0, &connector_id, 1, mode) != 0) {
+        perror("drmModeSetCrtc (with_mode)");
+        return -1;
+    }
+    return 0;
+}
+
 EXPORT drmModeConnector* get_connector(int fd, drmModeRes *res) {
     drmModeConnector *conn = NULL;
     for (int i = 0; i < res->count_connectors; i++) {

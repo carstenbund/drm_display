@@ -169,3 +169,24 @@ EXPORT void free_crtc(drmModeCrtc *crtc) {
     drmModeFreeCrtc(crtc);
 }
 
+EXPORT void destroy_framebuffer(int fd, uint32_t fb_id, uint32_t handle) {
+    ioctl(fd, DRM_IOCTL_MODE_RMFB, &fb_id);
+    struct drm_mode_destroy_dumb destroy = {};
+    destroy.handle = handle;
+    ioctl(fd, DRM_IOCTL_MODE_DESTROY_DUMB, &destroy);
+}
+
+EXPORT void restore_crtc(int fd, uint32_t crtc_id, uint32_t buffer_id,
+                          uint32_t x, uint32_t y, uint32_t connector_id,
+                          int mode_valid, drmModeModeInfo *mode) {
+    if (mode_valid) {
+        drmModeSetCrtc(fd, crtc_id, buffer_id, x, y, &connector_id, 1, mode);
+    } else {
+        drmModeSetCrtc(fd, crtc_id, 0, 0, 0, NULL, 0, NULL);
+    }
+}
+
+EXPORT void close_device(int fd) {
+    close(fd);
+}
+

@@ -150,6 +150,22 @@ class DRMDisplay:
         self.lib.free_crtc.argtypes = [ctypes.POINTER(drmModeCrtc)]
         self.lib.free_crtc.restype = None
 
+        self.lib.destroy_framebuffer.argtypes = [ctypes.c_int, ctypes.c_uint32, ctypes.c_uint32]
+        self.lib.destroy_framebuffer.restype = None
+
+        self.lib.restore_crtc.argtypes = [
+            ctypes.c_int,
+            ctypes.c_uint32, ctypes.c_uint32,
+            ctypes.c_uint32, ctypes.c_uint32,
+            ctypes.c_uint32,
+            ctypes.c_int,
+            ctypes.POINTER(drmModeModeInfo),
+        ]
+        self.lib.restore_crtc.restype = None
+
+        self.lib.close_device.argtypes = [ctypes.c_int]
+        self.lib.close_device.restype = None
+
         self.fd = self.lib.open_device(device.encode('utf-8'))
         if self.fd < 0:
             raise RuntimeError("Failed to open device")
@@ -273,22 +289,63 @@ class DRMDisplay:
             self.lib.free_resources(self.res)
             raise RuntimeError("Failed to set CRTC")
 
+    @staticmethod
+    def _validate_frame(data, name="frame"):
+        if not isinstance(data, np.ndarray):
+            raise TypeError(f"{name} must be a numpy ndarray")
+        if data.ndim != 3 or data.shape[2] != 4:
+            raise ValueError(f"{name} must be shape (H, W, 4), got {data.shape}")
+        if data.dtype != np.uint8:
+            raise ValueError(f"{name} must be dtype uint8, got {data.dtype}")
+        if not data.flags['C_CONTIGUOUS']:
+            raise ValueError(f"{name} must be C-contiguous; call np.ascontiguousarray() first")
+
     def clear(self):
         blank = np.zeros((self.screen_height, self.screen_width, 4), dtype=np.uint8)
         self.send_full_image(blank)
 
     def send_full_image(self, data):
+        self._validate_frame(data)
         data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.lib.send_to_fb(self.fd, self.fb_info.handle, self.fb_info.size, data_ptr, self.fb_info.width, self.fb_info.height, 0, 0, self.fb_info.pitch)
         self.lib.dirty_fb(self.fd, self.fb_info.fb_id)
 
     def send_partial_image(self, data, x, y):
+        self._validate_frame(data, "partial frame")
         height, width, _ = data.shape
+        if x < 0 or y < 0 or x + width > self.screen_width or y + height > self.screen_height:
+            raise ValueError(
+                f"partial image [{x}:{x+width}, {y}:{y+height}] out of bounds "
+                f"for screen {self.screen_width}x{self.screen_height}"
+            )
         data_ptr = data.ctypes.data_as(ctypes.POINTER(ctypes.c_uint8))
         self.lib.send_to_fb(self.fd, self.fb_info.handle, self.fb_info.size, data_ptr, width, height, x, y, self.fb_info.pitch)
         self.lib.dirty_fb(self.fd, self.fb_info.fb_id)
 
     def cleanup(self):
+        fd = getattr(self, 'fd', -1)
+        if fd < 0:
+            return
+
+        # 1. Restore the CRTC to what it was before we took over
+        if hasattr(self, 'crtc') and self.crtc and hasattr(self, 'conn') and self.conn:
+            old = self.crtc.contents
+            cid = self.conn.contents.connector_id
+            self.lib.restore_crtc(
+                fd,
+                old.crtc_id, old.buffer_id,
+                old.x, old.y,
+                cid,
+                old.mode_valid,
+                ctypes.pointer(old.mode),
+            )
+
+        # 2. Remove the framebuffer object and destroy the dumb buffer
+        if hasattr(self, 'fb_info') and self.fb_info.fb_id:
+            self.lib.destroy_framebuffer(fd, self.fb_info.fb_id, self.fb_info.handle)
+            self.fb_info.fb_id = 0
+
+        # 3. Free libdrm mode objects
         if hasattr(self, 'crtc') and self.crtc:
             self.lib.free_crtc(self.crtc)
             self.crtc = None
@@ -301,6 +358,10 @@ class DRMDisplay:
         if hasattr(self, 'res') and self.res:
             self.lib.free_resources(self.res)
             self.res = None
+
+        # 4. Close the device FD last
+        self.lib.close_device(fd)
+        self.fd = -1
 
     def close(self):
         self.cleanup()

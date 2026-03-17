@@ -9,10 +9,10 @@ class DBDisplay:
     via ``display.fb``.
     """
 
-    def __init__(self, device="dummy", width=1920, height=1080):
-        self.screen_width = width
-        self.screen_height = height
-        self.fb = np.zeros((height, width, 4), dtype=np.uint8)
+    def __init__(self, device="dummy", width=None, height=None):
+        self.screen_width = width or 1920
+        self.screen_height = height or 1080
+        self.fb = np.zeros((self.screen_height, self.screen_width, 4), dtype=np.uint8)
 
     def send_full_image(self, canvas):
         h, w = canvas.shape[:2]

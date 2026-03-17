@@ -36,7 +36,14 @@ def compile_libdrm_display(dest_dir):
     cmd = ["gcc", "-shared", "-fPIC", "-o", out] + cflags + [src] + ldflags
     print(f"Building {out} ...")
     print(" ".join(cmd))
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True)
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+        print(
+            f"WARNING: could not compile {out}: {exc}\n"
+            "DRMDisplay backend will be unavailable; "
+            "FBDisplay and DBDisplay still work without libdrm."
+        )
 
 
 class BuildPy(_BuildPy):

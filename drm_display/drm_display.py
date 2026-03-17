@@ -26,18 +26,18 @@ class drmModeModeInfo(ctypes.Structure):
 
 class drmModeRes(ctypes.Structure):
     _fields_ = [
-        ("fb_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
-        ("crtc_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
+        ("count_fbs",        ctypes.c_int),
+        ("fb_id_ptr",        ctypes.POINTER(ctypes.c_uint32)),
+        ("count_crtcs",      ctypes.c_int),
+        ("crtc_id_ptr",      ctypes.POINTER(ctypes.c_uint32)),
+        ("count_connectors", ctypes.c_int),
         ("connector_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
-        ("encoder_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
-        ("count_fbs", ctypes.c_uint32),
-        ("count_crtcs", ctypes.c_uint32),
-        ("count_connectors", ctypes.c_uint32),
-        ("count_encoders", ctypes.c_uint32),
-        ("min_width", ctypes.c_uint32),
-        ("max_width", ctypes.c_uint32),
-        ("min_height", ctypes.c_uint32),
-        ("max_height", ctypes.c_uint32),
+        ("count_encoders",   ctypes.c_int),
+        ("encoder_id_ptr",   ctypes.POINTER(ctypes.c_uint32)),
+        ("min_width",        ctypes.c_uint32),
+        ("max_width",        ctypes.c_uint32),
+        ("min_height",       ctypes.c_uint32),
+        ("max_height",       ctypes.c_uint32),
     ]
 
 class drmModeConnector(ctypes.Structure):
@@ -291,12 +291,16 @@ class DRMDisplay:
     def cleanup(self):
         if hasattr(self, 'crtc') and self.crtc:
             self.lib.free_crtc(self.crtc)
+            self.crtc = None
         if hasattr(self, 'enc') and self.enc:
             self.lib.free_encoder(self.enc)
+            self.enc = None
         if hasattr(self, 'conn') and self.conn:
             self.lib.free_connector(self.conn)
+            self.conn = None
         if hasattr(self, 'res') and self.res:
             self.lib.free_resources(self.res)
+            self.res = None
 
     def close(self):
         self.cleanup()

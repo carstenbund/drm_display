@@ -107,15 +107,16 @@ class _ModeInfo(ctypes.Structure):
     ]
 
 class _Res(ctypes.Structure):
+    # Must match drmModeRes exactly: each count is paired with its pointer.
     _fields_ = [
+        ("count_fbs",        ctypes.c_int),
         ("fb_id_ptr",        ctypes.POINTER(ctypes.c_uint32)),
+        ("count_crtcs",      ctypes.c_int),
         ("crtc_id_ptr",      ctypes.POINTER(ctypes.c_uint32)),
+        ("count_connectors", ctypes.c_int),
         ("connector_id_ptr", ctypes.POINTER(ctypes.c_uint32)),
+        ("count_encoders",   ctypes.c_int),
         ("encoder_id_ptr",   ctypes.POINTER(ctypes.c_uint32)),
-        ("count_fbs",        ctypes.c_uint32),
-        ("count_crtcs",      ctypes.c_uint32),
-        ("count_connectors", ctypes.c_uint32),
-        ("count_encoders",   ctypes.c_uint32),
         ("min_width",        ctypes.c_uint32),
         ("max_width",        ctypes.c_uint32),
         ("min_height",       ctypes.c_uint32),

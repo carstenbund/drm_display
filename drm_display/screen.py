@@ -50,10 +50,12 @@ def _numpy_resize(img, new_h, new_w):
 
 
 class Screen:
-    def __init__(self, device=None, width=1920, height=1080):
+    def __init__(self, device=None, width=None, height=None):
         self.device = device
-        self.screen_width = width
-        self.screen_height = height
+        self._req_width = width
+        self._req_height = height
+        self.screen_width = width or 1920
+        self.screen_height = height or 1080
         self._last_image = None
         self._init_display()
 
@@ -68,7 +70,7 @@ class Screen:
             if self.device and self.device != device_path:
                 continue
             try:
-                self.display = DisplayClass(device_path, self.screen_width, self.screen_height)
+                self.display = DisplayClass(device_path, self._req_width, self._req_height)
                 self.screen_width = self.display.screen_width
                 self.screen_height = self.display.screen_height
                 print(f"Display: {device_path} ({self.screen_width}x{self.screen_height})")
@@ -103,10 +105,22 @@ class Screen:
         self.display.close()
         self._last_image = None
 
-    def show_image(self, img, img2=None):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+    def show_image(self, img, img2=None, fmt="BGR"):
         """Scale and centre a (H, W, 3|4) uint8 NumPy image on the screen.
 
-        Channel order (BGR, RGB, BGRA, RGBA) is preserved as-is.
+        *fmt* specifies the channel order of the input array.  The image is
+        always converted to BGRA before being sent to the display hardware
+        (DRM framebuffers expect XRGB8888 little-endian, i.e. BGRX in memory).
+
+        Supported *fmt* values: ``"BGR"`` (default), ``"RGB"``,
+        ``"BGRA"``, ``"RGBA"``.
+
         Downscaling uses a vectorised numpy area-average — no extra
         dependencies beyond numpy.
 
@@ -130,10 +144,20 @@ class Screen:
         pad_x = max(0, (self.screen_width  - img_w) // 2)
         pad_y = max(0, (self.screen_height - img_h) // 2)
 
-        # Ensure 4 channels — just append a fully-opaque alpha plane
-        if img.shape[2] == 3:
+        # Normalise to BGRA (canonical internal layout for DRM/fb backends)
+        fmt = fmt.upper()
+        if fmt == "RGB":
+            alpha = np.full((*img.shape[:2], 1), 255, dtype=np.uint8)
+            img = np.concatenate([img[:, :, ::-1], alpha], axis=2)  # RGB→BGR + A
+        elif fmt == "RGBA":
+            img = img[:, :, [2, 1, 0, 3]]  # RGBA → BGRA
+        elif fmt == "BGR":
             alpha = np.full((*img.shape[:2], 1), 255, dtype=np.uint8)
             img = np.concatenate([img, alpha], axis=2)
+        elif fmt == "BGRA":
+            pass  # already canonical
+        else:
+            raise ValueError(f"Unknown fmt={fmt!r}; expected one of: BGR, RGB, BGRA, RGBA")
 
         canvas = np.zeros((self.screen_height, self.screen_width, 4), dtype=np.uint8)
         canvas[pad_y:pad_y + img_h, pad_x:pad_x + img_w] = img

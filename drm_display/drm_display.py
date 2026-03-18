@@ -173,24 +173,26 @@ class DRMDisplay:
 
         self.res = self.lib.get_resources(self.fd)
         if not self.res:
+            self.res = None
+            self.cleanup()
             raise RuntimeError("Failed to get DRM resources")
 
         self.conn = self.lib.get_connector(self.fd, self.res)
         if not self.conn:
-            self.lib.free_resources(self.res)
+            self.conn = None
+            self.cleanup()
             raise RuntimeError("No connected connector found")
 
         self.enc = self.lib.get_encoder(self.fd, self.conn)
         if not self.enc:
-            self.lib.free_connector(self.conn)
-            self.lib.free_resources(self.res)
+            self.enc = None
+            self.cleanup()
             raise RuntimeError("Failed to get encoder")
 
         self.crtc = self.lib.get_crtc(self.fd, self.enc)
         if not self.crtc:
-            self.lib.free_encoder(self.enc)
-            self.lib.free_connector(self.conn)
-            self.lib.free_resources(self.res)
+            self.crtc = None
+            self.cleanup()
             raise RuntimeError("Failed to get CRTC")
 
         # -- mode selection ---------------------------------------------------
@@ -225,9 +227,9 @@ class DRMDisplay:
                     print(f"Mode matched requested size {width}x{height}")
                     break
             if selected_mode is None and modes:
-                # No exact match — use the connector's preferred/first mode.
-                # The framebuffer will still be created at the requested size;
-                # some panels (DSI/LVDS) accept this and do internal scaling.
+                # No exact match — fall back to the preferred/first mode.
+                # DRM requires the framebuffer to be at least as large as the
+                # active mode, so we override width/height to the mode size.
                 for m in modes:
                     if m.type & DRM_MODE_TYPE_PREFERRED:
                         selected_mode = m
@@ -236,9 +238,10 @@ class DRMDisplay:
                     selected_mode = modes[0]
                 print(
                     f"Warning: no connector mode for {width}x{height}. "
-                    f"Using connector mode {selected_mode.hdisplay}x{selected_mode.vdisplay} "
-                    f"with framebuffer {width}x{height} — panel may do internal scaling."
+                    f"Switching to {selected_mode.hdisplay}x{selected_mode.vdisplay}."
                 )
+                width  = selected_mode.hdisplay
+                height = selected_mode.vdisplay
         else:
             # Auto: use preferred mode or first available.
             for m in modes:
@@ -248,10 +251,7 @@ class DRMDisplay:
             if selected_mode is None and modes:
                 selected_mode = modes[0]
             if selected_mode is None:
-                self.lib.free_crtc(self.crtc)
-                self.lib.free_encoder(self.enc)
-                self.lib.free_connector(self.conn)
-                self.lib.free_resources(self.res)
+                self.cleanup()
                 raise RuntimeError(
                     "Connector reports no modes. "
                     "Pass width= and height= explicitly for custom LCD panels."
@@ -265,10 +265,7 @@ class DRMDisplay:
         # -- framebuffer + CRTC -----------------------------------------------
         self.fb_info = self.lib.create_framebuffer(self.fd, width, height)
         if not self.fb_info.fb_id:
-            self.lib.free_crtc(self.crtc)
-            self.lib.free_encoder(self.enc)
-            self.lib.free_connector(self.conn)
-            self.lib.free_resources(self.res)
+            self.cleanup()
             raise RuntimeError("Failed to create framebuffer")
 
         self.screen_width  = self.fb_info.width
@@ -283,10 +280,7 @@ class DRMDisplay:
             conn.connector_id,
             mode_ptr,
         ) != 0:
-            self.lib.free_crtc(self.crtc)
-            self.lib.free_encoder(self.enc)
-            self.lib.free_connector(self.conn)
-            self.lib.free_resources(self.res)
+            self.cleanup()
             raise RuntimeError("Failed to set CRTC")
 
     @staticmethod

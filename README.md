@@ -1,59 +1,40 @@
 # drm-display
 
-Python display library for Linux — write NumPy image arrays directly to a
-screen without a compositor, X server, or Wayland session.
+Render NumPy image arrays directly to a Linux display using DRM/KMS —
+no X11, Wayland, or `/dev/fb0` required.
 
-Initially designed for Raspberry PI as DRM setup for kiosk mode.
-
-Designed for **embedded systems, CVM/KVM virtual machines, single-board
-computers, and headless servers with an attached display** where the traditional
-`/dev/fb0` framebuffer is not exposed (or should not be used) because the
-driver stack has moved to the modern DRM/KMS subsystem.
+Designed for Raspberry Pi, embedded systems, virtual machines, and headless
+servers with a connected display.
 
 ```python
 from drm_display import Screen
 import numpy as np
 
-screen = Screen()               # auto-detects the best available backend
+screen = Screen()               # auto-detects best backend
 w, h   = screen.get_screen_size()
 
 canvas = np.zeros((h, w, 4), dtype=np.uint8)
-canvas[:, :, 2] = 255          # BGRA — red fill
+canvas[:, :, 2] = 255          # BGRA — red
+
 screen.show(canvas)
 ```
 
 ---
 
-## Features
+## Why this exists
 
-- **Three backends, one interface** — `Screen` probes devices in priority order
-  and selects the best one automatically; fall back is always graceful
-- **DRM/KMS backend** — direct access to `/dev/dri/cardN` via `libdrm`,
-  works with modern virtio-gpu, vmwgfx, vc4, i915, amdgpu, and any other
-  KMS-capable driver; no compositor required
-- **Smart mode selection** — reads the connector's advertised mode list and
-  picks the preferred mode automatically; accepts explicit `width`/`height`
-  for custom LCD panels that don't enumerate EDID modes
-- **Legacy framebuffer backend** — pure-Python `/dev/fb0` access via
-  `numpy.memmap`; zero C dependencies, kept for compatibility
-- **Headless / in-memory backend** — numpy buffer that always succeeds;
-  useful for unit testing and CI pipelines
-- **OpenCV integration** — `Screen.show_image()` scales and centres any
-  BGR/BGRA OpenCV image to fit the display, with optional side-by-side layout
-- **Partial updates** — `send_partial_image(patch, x, y)` blits a sub-region
-  without touching the rest of the framebuffer
-- **`drm-list-modes` CLI** — built-in diagnostic tool: checks kernel modules,
-  master-lock status, connector modes, and framebuffer devices in one pass
+On modern Linux systems (including Raspberry Pi OS), displays are no longer
+reliably exposed via `/dev/fb0`.  Instead, they are managed through the
+DRM/KMS subsystem (`/dev/dri/cardN`).
 
----
+This creates problems:
 
-## Why DRM/KMS instead of /dev/fb0?
+- `/dev/fb0` is missing or read-only
+- X11 / Wayland is overkill for simple display tasks
+- Direct rendering becomes unnecessarily complex
 
-Modern Linux GPU drivers (including virtio-gpu used by QEMU/KVM, and vc4 used
-by Raspberry Pi OS) register as **DRM/KMS** devices and expose a display
-through `/dev/dri/cardN`.  They may also expose a compatibility `/dev/fb0`
-node, but it is often read-only, absent, or explicitly disabled by the
-distribution.
+**drm-display solves this by providing a simple NumPy-to-screen pipeline**,
+with automatic backend selection and graceful fallback.
 
 If you are seeing errors like `Permission denied on /dev/fb0` or
 `/dev/fb0: No such file or directory` on a machine that clearly has a working
@@ -61,28 +42,92 @@ display, the driver has moved to DRM.  This package handles that transparently.
 
 ---
 
-## Backend comparison
+## Features
 
-| Backend | Class | Device | C build | Dependency | Use when |
-|---|---|---|---|---|---|
-| DRM/KMS | `DRMDisplay` | `/dev/dri/cardN` | required | `libdrm` | Modern drivers, CVM/KVM, SBC |
-| Framebuffer | `FBDisplay` | `/dev/fb0` | none | numpy only | Legacy kernels, compatibility |
-| Headless | `DBDisplay` | *(in-memory)* | none | numpy only | Testing, CI, no display |
+- **One interface, multiple backends** —
+  Automatically selects the best available display method
+- **DRM/KMS backend (primary)** —
+  Direct rendering via `/dev/dri/cardN` using libdrm;
+  works with vc4 (Raspberry Pi), virtio-gpu, vmwgfx, i915, amdgpu, ...
+- **Framebuffer fallback (`/dev/fb0`)** —
+  Pure Python, no C dependencies
+- **Headless backend** —
+  Always succeeds — ideal for testing and CI
+- **NumPy-first design** —
+  Send raw `(H, W, 4)` uint8 arrays directly
+- **Explicit channel handling** —
+  `show_image(img, fmt="BGR")` converts BGR, RGB, BGRA, or RGBA
+  to the canonical BGRA layout before blitting — no ambiguity
+- **Partial updates** —
+  Update subregions without rewriting the full frame
+- **Context manager support** —
+  `with Screen() as s:` for safe, automatic cleanup
+- **Smart mode selection** —
+  Reads the connector's mode list and picks the preferred mode automatically;
+  accepts explicit `width`/`height` for custom LCD panels without EDID
+- **Built-in diagnostics** —
+  `drm-list-modes` shows devices, connectors, modes, and lock state
+
+---
+
+## When to use drm-display
+
+This library is ideal if you want to:
+
+- Render directly to a screen without a desktop environment
+- Build kiosk systems on Raspberry Pi
+- Display NumPy / OpenCV output without GUI frameworks
+- Run inside VMs (virtio-gpu, vmwgfx)
+- Work on embedded Linux systems with modern GPU drivers
+
+## When NOT to use it
+
+This library is not intended for:
+
+- GUI applications with windows, widgets, or user interaction
+- Wayland / X11 integration
+- Hardware-accelerated rendering (OpenGL, Vulkan)
+- Complex animation pipelines requiring vsync control
+
+Use a full graphics stack for those use cases.
+
+---
+
+## Raspberry Pi
+
+Works out of the box on modern Raspberry Pi OS (Bullseye / Bookworm) using
+the DRM/KMS driver.  Make sure KMS is enabled in `/boot/config.txt`:
+
+```
+dtoverlay=vc4-kms-v3d
+```
+
+Typical use cases:
+
+- Fullscreen HDMI output without X/Wayland
+- Kiosk displays
+- Camera / CV pipelines (OpenCV -> screen)
+- Lightweight dashboards
+
+If `/dev/fb0` is missing or unusable, this library automatically switches
+to DRM.
 
 ---
 
 ## Installation
 
-### Option 1 — PyPI (recommended)
+### Quick install
 
 ```bash
 pip install drm-display
 ```
 
 `pip install` automatically compiles the small C helper (`drm_display.c`) for
-the DRM backend using your system's `libdrm`.
+the DRM backend using your system's `libdrm`.  If `gcc` or `libdrm` is absent
+the package still installs — `FBDisplay` and `DBDisplay` work without the C
+build step.
 
-**System prerequisites for the DRM backend:**
+### Requirements for DRM backend
 
 | Distribution | Command |
 |---|---|
@@ -91,13 +136,7 @@ the DRM backend using your system's `libdrm`.
 | Alpine | `apk add gcc musl-dev libdrm-dev` |
 | Arch | `pacman -S gcc libdrm` |
 
-`pkg-config libdrm` is used when available; otherwise the common include
-paths `/usr/include/libdrm` and `/usr/include/drm` are tried in order.
-
-If `libdrm` or `gcc` is absent the package still installs — `FBDisplay` and
-`DBDisplay` work without the C build step.
-
-### Option 2 — Editable install from source
+### Editable install from source
 
 ```bash
 git clone https://github.com/carstenbund/drm_display.git
@@ -108,7 +147,7 @@ pip install -e .        # compiles libdrm_display.so in-place
 Local changes to Python files take effect immediately.
 Re-run `pip install -e .` (or `make`) after changing `drm_display.c`.
 
-### Option 3 — Compile the C helper manually
+### Compile the C helper manually
 
 ```bash
 make                                          # auto via pkg-config
@@ -127,50 +166,57 @@ make info                                     # show resolved flags
 from drm_display import Screen
 import numpy as np
 
-# Auto-detect: tries card0 → card1 → /dev/fb0 → headless
-screen = Screen()
+# Auto-detect: tries card0 -> card1 -> /dev/fb0 -> headless
+with Screen() as screen:
+    w, h = screen.get_screen_size()
 
-# Force a specific device
-screen = Screen(device="/dev/dri/card0")
+    canvas = np.zeros((h, w, 4), dtype=np.uint8)
+    canvas[:, :, 1] = 128    # mid-green in BGRA
+    screen.show(canvas)
+```
 
-# Custom LCD with no EDID — pass explicit size
-screen = Screen(device="/dev/dri/card0", width=800, height=480)
+Other construction patterns:
 
-w, h = screen.get_screen_size()     # actual size after init
-
-# Send a frame (BGRA uint8, shape (h, w, 4))
-canvas = np.zeros((h, w, 4), dtype=np.uint8)
-canvas[:, :, 1] = 128              # mid-green
-screen.show(canvas)
-
-# Get the last shown frame
-last = screen.copy()
-
-screen.clear()
-screen.close()
+```python
+screen = Screen(device="/dev/dri/card0")              # force a specific device
+screen = Screen(device="/dev/dri/card0", width=800, height=480)  # custom LCD, no EDID
+screen = Screen()                                      # true auto-detect (width/height from mode)
 ```
 
 ### Displaying an image array
 
-`show_image()` accepts any `(H, W, 3|4)` uint8 NumPy array — BGR, RGB,
-BGRA, or RGBA.  Downscaling is done with a vectorised numpy area-average;
-no OpenCV or Pillow needed.
+`show_image()` accepts any `(H, W, 3|4)` uint8 NumPy array.  Specify the
+input channel order with `fmt=` — the image is always converted to BGRA
+before blitting (DRM framebuffers use XRGB8888 little-endian, i.e. BGRX
+in memory).
 
 ```python
-import numpy as np
 from drm_display import Screen
 
-screen = Screen()
+with Screen() as screen:
+    # OpenCV (BGR by default)
+    screen.show_image(cv2_frame, fmt="BGR")
 
-# Any uint8 array works — from OpenCV, Pillow, imageio, …
-img = np.zeros((480, 640, 3), dtype=np.uint8)   # plain numpy
-img[:, :, 0] = 200                               # blue-ish
+    # Pillow / imageio / matplotlib (RGB)
+    screen.show_image(pil_array, fmt="RGB")
 
-screen.show_image(img)              # scales + centres automatically
-
-# Side-by-side comparison
-screen.show_image(img, img2)
+    # Side-by-side comparison
+    screen.show_image(left, img2=right, fmt="BGR")
 ```
+
+Supported formats: `"BGR"` (default), `"RGB"`, `"BGRA"`, `"RGBA"`.
+
+Downscaling uses a vectorised numpy area-average; no OpenCV or Pillow needed.
+
+---
+
+## Backend comparison
+
+| Backend | Class | Device | C build | Dependency | Use when |
+|---|---|---|---|---|---|
+| DRM/KMS | `DRMDisplay` | `/dev/dri/cardN` | required | `libdrm` | Modern drivers, CVM/KVM, SBC |
+| Framebuffer | `FBDisplay` | `/dev/fb0` | none | numpy only | Legacy kernels, compatibility |
+| Headless | `DBDisplay` | *(in-memory)* | none | numpy only | Testing, CI, no display |
 
 ---
 
@@ -187,10 +233,7 @@ import numpy as np
 # Auto mode: driver picks the preferred resolution
 drm = DRMDisplay(device="/dev/dri/card0")
 
-# Explicit size: finds matching mode in connector list;
-# if none found, uses connector's preferred mode for set_crtc
-# and creates the framebuffer at the requested size
-# (panel does internal scaling — common on custom DSI/LVDS screens)
+# Explicit size for custom DSI/LVDS panels without EDID
 drm = DRMDisplay(device="/dev/dri/card0", width=800, height=480)
 
 w = drm.screen_width
@@ -203,7 +246,7 @@ patch  = np.zeros((100, 200, 4), dtype=np.uint8)
 patch[:, :, 2] = 255
 drm.send_partial_image(patch, x=50, y=50)  # blit a region
 
-drm.cleanup()   # or just let __del__ handle it
+drm.close()    # restores previous CRTC, destroys FB, closes device
 ```
 
 On init, `DRMDisplay` prints every mode the connector advertises — useful when
@@ -216,6 +259,9 @@ Connector reports 2 mode(s):
 Auto-selected mode 1920x1080@60
 Framebuffer: 1920x1080
 ```
+
+Input validation enforces `(H, W, 4)` uint8 C-contiguous arrays and
+bounds-checks partial updates before writing.
 
 ### FBDisplay — legacy /dev/fb0
 
@@ -272,7 +318,7 @@ assembling answers from `lsmod`, `ls /dev/dri`, and `ls /dev/fb*` separately.
 
 ── DRM devices ─────────────────────────────────────────────────
   /dev/dri/card0  [driver: virtio_gpu]
-    Master: ⚠ locked by pid 1234 (Xorg)
+    Master: locked by pid 1234 (Xorg)
     Connector 1: Virtual-1       [connected]  527 x 296 mm
       * 1920x1080 @  60 Hz   (1920x1080)
         1280x720  @  60 Hz   (1280x720)
@@ -335,24 +381,28 @@ saves a lot of guesswork.
 
 ```
 Screen()
-  │
-  ├─ try /dev/dri/card0  ──►  DRMDisplay
-  │     open device
-  │     drmModeGetResources
-  │     find connected connector
-  │     select best mode (preferred flag → first → explicit size)
-  │     create dumb framebuffer
-  │     drmModeSetCrtc with selected mode
-  │     ▼
-  │   send_full_image(canvas)
-  │     mmap framebuffer
-  │     memcpy row-by-row (supports partial updates)
-  │
-  ├─ try /dev/fb0  ──►  FBDisplay
-  │     numpy.memmap(device, shape=(h, w, 4))
-  │     canvas slice assignment
-  │
-  └─ dummy  ──►  DBDisplay
+  |
+  +-- try /dev/dri/card0  -->  DRMDisplay
+  |     open device
+  |     drmModeGetResources
+  |     find connected connector
+  |     select best mode (preferred flag -> first -> explicit size)
+  |     create dumb framebuffer
+  |     drmModeSetCrtc with selected mode
+  |     v
+  |   send_full_image(canvas)
+  |     mmap framebuffer
+  |     memcpy row-by-row (supports partial updates)
+  |   close()
+  |     restore previous CRTC state
+  |     remove framebuffer + destroy dumb buffer
+  |     close device fd
+  |
+  +-- try /dev/fb0  -->  FBDisplay
+  |     numpy.memmap(device, shape=(h, w, 4))
+  |     canvas slice assignment
+  |
+  +-- dummy  -->  DBDisplay
         numpy.zeros(shape=(h, w, 4))
         always succeeds
 ```

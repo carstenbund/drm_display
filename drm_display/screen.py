@@ -50,14 +50,15 @@ def _numpy_resize(img, new_h, new_w):
 
 
 class Screen:
-    def __init__(self, device=None, width=None, height=None):
+    def __init__(self, device=None, canvas_width=None, canvas_height=None):
         self.device = device
-        self._req_width = width
-        self._req_height = height
-        self.screen_width = width or 1920
-        self.screen_height = height or 1080
         self._last_image = None
         self._init_display()
+        # Canvas is the painter's render resolution — independent of the
+        # physical display.  Defaults to screen size so existing code that
+        # treats them as the same keeps working.
+        self.canvas_width  = canvas_width  or self.screen_width
+        self.canvas_height = canvas_height or self.screen_height
 
     def _init_display(self):
         candidates = [
@@ -70,8 +71,9 @@ class Screen:
             if self.device and self.device != device_path:
                 continue
             try:
-                self.display = DisplayClass(device_path, self._req_width, self._req_height)
-                self.screen_width = self.display.screen_width
+                # Always let the backend auto-detect the display resolution.
+                self.display = DisplayClass(device_path, None, None)
+                self.screen_width  = self.display.screen_width
                 self.screen_height = self.display.screen_height
                 print(f"Display: {device_path} ({self.screen_width}x{self.screen_height})")
                 return
@@ -83,17 +85,36 @@ class Screen:
     # ── public API ────────────────────────────────────────────────────────────
 
     def show(self, canvas):
-        """Send a (H, W, 4) BGRA uint8 NumPy array to the display."""
+        """Send a (H, W, 4) BGRA uint8 array sized to the *screen* directly."""
         self._last_image = canvas
         self.display.send_full_image(canvas)
+
+    def show_canvas(self, canvas, fmt="BGRA"):
+        """Send a painter canvas to the screen.
+
+        If canvas_size == screen_size the array is blitted directly.
+        Otherwise it is scaled and centred via show_image(), so the
+        painter is free to render at any resolution or aspect ratio.
+
+        *fmt* is passed to show_image() when scaling is needed; it is
+        ignored for direct blits (canvas must already be BGRA uint8).
+        """
+        if canvas.shape[1] == self.screen_width and canvas.shape[0] == self.screen_height:
+            self.show(canvas)
+        else:
+            self.show_image(canvas, fmt=fmt)
 
     def clear(self):
         """Fill the display with black."""
         self.display.clear()
 
     def get_screen_size(self):
-        """Return (width, height)."""
+        """Return physical display (width, height)."""
         return self.screen_width, self.screen_height
+
+    def get_canvas_size(self):
+        """Return the painter canvas (width, height)."""
+        return self.canvas_width, self.canvas_height
 
     def copy(self):
         """Return a copy of the last shown frame, or None if nothing shown yet."""

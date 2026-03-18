@@ -179,8 +179,18 @@ Other construction patterns:
 
 ```python
 screen = Screen(device="/dev/dri/card0")              # force a specific device
-screen = Screen(device="/dev/dri/card0", width=800, height=480)  # custom LCD, no EDID
-screen = Screen()                                      # true auto-detect (width/height from mode)
+screen = Screen()                                      # full auto-detect
+
+# Painter canvas independent of display resolution.
+# Screen always auto-detects hardware; canvas is the render resolution.
+screen = Screen(canvas_width=1024, canvas_height=1024)  # square canvas, any screen
+sw, sh = screen.get_screen_size()   # actual display pixels
+cw, ch = screen.get_canvas_size()   # painter render size
+
+# Render at canvas resolution, display at screen resolution
+canvas = np.zeros((ch, cw, 4), dtype=np.uint8)
+canvas[:, :, 2] = 255
+screen.show_canvas(canvas)          # scales to screen if sizes differ
 ```
 
 ### Displaying an image array

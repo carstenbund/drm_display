@@ -4,7 +4,7 @@ Render NumPy image arrays directly to a Linux display using DRM/KMS —
 no X11, Wayland, or `/dev/fb0` required.
 
 Designed for Raspberry Pi, embedded systems, virtual machines, and headless
-servers with a connected display.
+servers with no connected display.
 
 ```python
 from drm_display import Screen

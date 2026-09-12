@@ -4,11 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drm-display"
-version = "0.1.9"
+version = "0.1.10"
 description = "Python bindings for Linux DRM/KMS display output via /dev/dri/cardN"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
+# Two entries, not one {name, email} pair: setuptools maps a pair to
+# Author-email alone and leaves the legacy Author header unset, so anything
+# reading Author (pypistats, some mirrors) reports "None".
+authors = [
+    { name = "Carsten Bund" },
+    { email = "carstenbund@gmail.com" },
+]
 dependencies = ["numpy"]
 keywords = ["drm", "kms", "display", "linux", "framebuffer", "embedded"]
 classifiers = [

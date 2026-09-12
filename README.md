@@ -469,6 +469,8 @@ drm-list-modes    # shows which process holds master
 
 Changes:
 
+0.1.10  Packaging: the project had no author at all -- pyproject carried no
+        authors field, so both Author and Author-email were empty on PyPI.
 0.1.9   Point at drm-screen for layers, compositing, and pointer input
         rather than listing them as out of scope.  Record release
         history back to 0.1.5.

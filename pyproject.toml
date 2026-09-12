@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drm-display"
-version = "0.1.7"
+version = "0.1.8"
 description = "Python bindings for Linux DRM/KMS display output via /dev/dri/cardN"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -1,0 +1,6 @@
+# package-data globs *.so so the compiled library lands in a wheel, but that
+# same glob sweeps a locally-built libdrm_display.so into the sdist, where it
+# does not belong: an sdist is source, and the .so is built at install time by
+# setup.py's build_py hook.  Shipping one means a machine that cannot run gcc
+# silently keeps a binary compiled for someone else's architecture.
+exclude drm_display/*.so

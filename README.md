@@ -82,14 +82,26 @@ This library is ideal if you want to:
 
 ## When NOT to use it
 
-This library is not intended for:
+`drm-display` is a thin surface over DRM/KMS: one buffer, one frame, no state.
+It is not intended for:
 
-- GUI applications with windows, widgets, or user interaction
 - Wayland / X11 integration
 - Hardware-accelerated rendering (OpenGL, Vulkan)
-- Complex animation pipelines requiring vsync control
 
-Use a full graphics stack for those use cases.
+Use a full graphics stack for those.
+
+Layers, compositing, and interaction are a level up rather than out of scope.
+[`drm-screen`](https://github.com/carstenbund/drm_screen) builds on this library
+and adds:
+
+- Persistent named layers -- position, z-order, visibility, opacity
+- Z-ordered alpha compositing into a single frame
+- Hit-testing and a pointer overlay for touch/mouse input
+- A pluggable renderer: numpy by default, with an optional `lvgl` backend
+
+```bash
+pip install drm-screen
+```
 
 ---
 
@@ -457,6 +469,19 @@ drm-list-modes    # shows which process holds master
 
 Changes:
 
+0.1.9   Point at drm-screen for layers, compositing, and pointer input
+        rather than listing them as out of scope.  Record release
+        history back to 0.1.5.
+0.1.8   Publish sdist only -- the previous py3-none-any wheel carried an
+        aarch64 .so and was installed on every platform.  Stop shipping the
+        compiled library in the sdist.  Say plainly when libdrm_display.so is
+        missing or built for another architecture, instead of a raw OSError.
+        Fix resolution mismatch crash and double-free in init error paths.
+0.1.7   never released
+0.1.6   Fixes from API review
+0.1.5   drm-list-modes segfault and AttributeError; DRMDisplay.clear();
+        Screen.close() across all backends; call drmModeDirtyFB after each
+        write so the framebuffer is visible on vmwgfx
 0.1.3   Cleanup README.md
 0.1.2   added Screen handler class, removed CV2 and Pillow dependencies. 
 0.1.0   initial

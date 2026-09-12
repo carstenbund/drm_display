@@ -1,5 +1,6 @@
 import ctypes
 import os
+import platform
 import numpy as np
 import time
 
@@ -89,11 +90,44 @@ class FramebufferInfo(ctypes.Structure):
                 ("width", ctypes.c_uint32),
                 ("height", ctypes.c_uint32)]
 
+_BUILD_HINT = (
+    "Build it with:  make            (needs libdrm-dev / libdrm-devel and gcc)\n"
+    "or reinstall from source:  pip install --no-binary drm-display drm-display"
+)
+
+
+def _load_library():
+    """Load libdrm_display.so, or explain why it could not be loaded.
+
+    ctypes raises a bare OSError here, and its message ("cannot open shared
+    object file", "wrong ELF class") rarely points at the actual problem --
+    which is nearly always that the library was never compiled, or was
+    compiled for a different architecture than the one now running.
+    """
+    lib_path = os.path.join(os.path.dirname(__file__), "libdrm_display.so")
+
+    if not os.path.exists(lib_path):
+        raise RuntimeError(
+            f"libdrm_display.so is missing from {os.path.dirname(__file__)}.\n"
+            f"{_BUILD_HINT}\n"
+            "FBDisplay and DBDisplay do not need it and still work."
+        )
+
+    try:
+        return ctypes.CDLL(lib_path)
+    except OSError as exc:
+        raise RuntimeError(
+            f"libdrm_display.so could not be loaded ({exc}).\n"
+            f"It is most likely compiled for a different architecture than "
+            f"{platform.machine()}; rebuilding it here will fix that.\n"
+            f"{_BUILD_HINT}\n"
+            "FBDisplay and DBDisplay do not need it and still work."
+        ) from exc
+
+
 class DRMDisplay:
     def __init__(self, device="/dev/dri/card0", width=None, height=None):
-        base_path = os.path.dirname(__file__)
-        lib_path = os.path.join(base_path, "libdrm_display.so")
-        self.lib = ctypes.CDLL(lib_path)
+        self.lib = _load_library()
 
         self.lib.open_device.argtypes = [ctypes.c_char_p]
         self.lib.open_device.restype = ctypes.c_int
